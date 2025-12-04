@@ -67,7 +67,7 @@ services:
     env_file:
       - ./task2-hadoop.env
     environment:
-      - SERVICE_PRECONDITION=namenode:8020 datanode:9864
+      - SERVICE_PRECONDITION=namenode:8020 datanode:50075
     ports:
       - "8088:8088"  # ResourceManager Web UI
       - "8032:8032"  # ResourceManager address
@@ -90,7 +90,7 @@ services:
     env_file:
       - ./task2-hadoop.env
     environment:
-      - SERVICE_PRECONDITION=namenode:8020 datanode:9864 resourcemanager:8088
+      - SERVICE_PRECONDITION=namenode:8020 datanode:50075 resourcemanager:8088
     depends_on:
       - resourcemanager
     networks:
