@@ -1,0 +1,216 @@
+version: '3.8'
+
+# =============================================================================
+# Unified Docker Compose for Task 2 - Data Analysis
+# Integrates: Hadoop MapReduce, Hive, and Spark
+# Based on IIT lab configurations
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # HDFS NameNode - Core Storage Layer
+  # Using custom image from lab5 that supports Hive
+  # ---------------------------------------------------------------------------
+  namenode:
+    image: ramilu90/hive-namenode:1.0.0
+    container_name: namenode
+    restart: always
+    env_file:
+      - ./task2-hadoop.env
+    environment:
+      - CLUSTER_NAME=task2-cluster
+      - HDFS_NAMENODE_RPC_ADDRESS=namenode:8020
+    volumes:
+      - ./data:/opt/data
+      - ./resources:/opt/resources
+      - ./mapreduce-jars:/opt/mapreduce-jars
+      - namenode_data:/hadoop/dfs/name
+    ports:
+      - "50070:50070"  # Hadoop 2.x NameNode Web UI
+      - "8020:8020"    # HDFS RPC
+    networks:
+      - task2-net
+    healthcheck:
+      test: ["CMD", "hdfs", "dfsadmin", "-report"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  # ---------------------------------------------------------------------------
+  # HDFS DataNode
+  # ---------------------------------------------------------------------------
+  datanode:
+    image: ramilu90/hive-datanode:1.0.0
+    container_name: datanode
+    restart: always
+    env_file:
+      - ./task2-hadoop.env
+    environment:
+      - SERVICE_PRECONDITION=namenode:8020
+      - HDFS_NAMENODE_RPC_ADDRESS=namenode:8020
+    volumes:
+      - datanode_data:/hadoop/dfs/data
+    depends_on:
+      namenode:
+        condition: service_healthy
+    networks:
+      - task2-net
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL for Hive Metastore
+  # ---------------------------------------------------------------------------
+  hive-metastore-postgresql:
+    image: ramilu90/hive-metastore-postgresql:1.0.0
+    container_name: hive-metastore-postgresql
+    restart: always
+    environment:
+      POSTGRES_USER: hive
+      POSTGRES_PASSWORD: hive
+      POSTGRES_DB: metastore
+    volumes:
+      - metastore_db:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - task2-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hive"]
+      interval: 5s
+      retries: 20
+      timeout: 5s
+
+  # ---------------------------------------------------------------------------
+  # Hive Metastore Schema Initialization
+  # ---------------------------------------------------------------------------
+  hive-metastore-init:
+    image: ramilu90/hive-metastore-init:1.0.0
+    container_name: hive-metastore-init
+    env_file:
+      - ./task2-hadoop.env
+    depends_on:
+      hive-metastore-postgresql:
+        condition: service_healthy
+      namenode:
+        condition: service_healthy
+    command: ["schematool", "-dbType", "postgres", "-initSchema", "-verbose"]
+    networks:
+      - task2-net
+
+  # ---------------------------------------------------------------------------
+  # Hive Metastore Service
+  # ---------------------------------------------------------------------------
+  hive-metastore:
+    image: ramilu90/hive-metastore:1.0.0
+    container_name: hive-metastore
+    env_file:
+      - ./task2-hadoop.env
+    environment:
+      - HADOOP_USER_NAME=root
+    depends_on:
+      hive-metastore-init:
+        condition: service_completed_successfully
+      namenode:
+        condition: service_healthy
+    command: /opt/hive/bin/hive --service metastore
+    ports:
+      - "9083:9083"
+    networks:
+      - task2-net
+
+  # ---------------------------------------------------------------------------
+  # HiveServer2 - Query Interface
+  # ---------------------------------------------------------------------------
+  hive-server:
+    image: ramilu90/hive-server:1.0.0
+    container_name: hive-server
+    platform: linux/amd64
+    volumes:
+      - ./data:/opt/data
+      - ./hive-scripts:/opt/hive-scripts
+    env_file:
+      - ./task2-hadoop.env
+    environment:
+      - HADOOP_USER_NAME=root
+    depends_on:
+      hive-metastore:
+        condition: service_started
+      namenode:
+        condition: service_healthy
+    command: /opt/hive/bin/hiveserver2
+    ports:
+      - "10000:10000"  # HiveServer2 Thrift
+    networks:
+      - task2-net
+
+  # ---------------------------------------------------------------------------
+  # Spark Master
+  # Using custom image from lab7
+  # ---------------------------------------------------------------------------
+  spark-master:
+    image: ramilu90/spark-master
+    container_name: spark-master
+    platform: linux/amd64
+    volumes:
+      - ./data:/opt/data
+      - ./spark-scripts:/opt/spark-scripts
+      - ./resources:/opt/resources
+    depends_on:
+      - namenode
+      - datanode
+    ports:
+      - "8080:8080"  # Spark Master Web UI
+      - "7077:7077"  # Spark Master Port
+    environment:
+      - INIT_DAEMON_STEP=setup_spark
+      - CORE_CONF_fs_defaultFS=hdfs://namenode:8020
+    networks:
+      - task2-net
+
+  # ---------------------------------------------------------------------------
+  # Spark Worker 1
+  # ---------------------------------------------------------------------------
+  spark-worker-1:
+    image: ramilu90/spark-worker
+    container_name: spark-worker-1
+    platform: linux/amd64
+    depends_on:
+      - spark-master
+    ports:
+      - "8081:8081"  # Spark Worker Web UI
+    environment:
+      - SPARK_MASTER=spark://spark-master:7077
+      - CORE_CONF_fs_defaultFS=hdfs://namenode:8020
+    networks:
+      - task2-net
+
+  # ---------------------------------------------------------------------------
+  # Spark Worker 2 (Optional - for better parallelism)
+  # ---------------------------------------------------------------------------
+  spark-worker-2:
+    image: ramilu90/spark-worker
+    container_name: spark-worker-2
+    platform: linux/amd64
+    depends_on:
+      - spark-master
+    ports:
+      - "8082:8082"  # Spark Worker Web UI
+    environment:
+      - SPARK_MASTER=spark://spark-master:7077
+      - CORE_CONF_fs_defaultFS=hdfs://namenode:8020
+    networks:
+      - task2-net
+
+# =============================================================================
+# Persistent Volumes
+# =============================================================================
+volumes:
+  namenode_data:
+  datanode_data:
+  metastore_db:
+
+# =============================================================================
+# Network Configuration
+# =============================================================================
+networks:
+  task2-net:
+    driver: bridge
