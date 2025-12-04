@@ -59,46 +59,6 @@ services:
       - task2-net
 
   # ---------------------------------------------------------------------------
-  # YARN ResourceManager - Job Scheduling and Resource Management
-  # ---------------------------------------------------------------------------
-  resourcemanager:
-    image: ramilu90/hadoop-datanode
-    container_name: resourcemanager
-    platform: linux/amd64
-    restart: always
-    env_file:
-      - ./task2-hadoop.env
-    environment:
-      - SERVICE_PRECONDITION=namenode:8020 namenode:50070 datanode:50075
-    ports:
-      - "8088:8088"  # ResourceManager Web UI
-      - "8032:8032"  # ResourceManager address
-    depends_on:
-      namenode:
-        condition: service_healthy
-      datanode:
-        condition: service_started
-    networks:
-      - task2-net
-
-  # ---------------------------------------------------------------------------
-  # YARN NodeManager - Container Execution
-  # ---------------------------------------------------------------------------
-  nodemanager:
-    image: ramilu90/hadoop-datanode
-    container_name: nodemanager
-    platform: linux/amd64
-    restart: always
-    env_file:
-      - ./task2-hadoop.env
-    environment:
-      - SERVICE_PRECONDITION=namenode:8020 namenode:50070 datanode:50075 resourcemanager:8088
-    depends_on:
-      - resourcemanager
-    networks:
-      - task2-net
-
-  # ---------------------------------------------------------------------------
   # PostgreSQL for Hive Metastore
   # ---------------------------------------------------------------------------
   hive-metastore-postgresql:
