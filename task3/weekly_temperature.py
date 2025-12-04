@@ -38,7 +38,7 @@ df = df.withColumn("date_formatted",
         lpad(col("day"), 2, "0")
     )
 )
-df = df.withColumn("date_proper", to_date(col("date_formatted"), "yyyy-MM-dd"))
+df = df.withColumn("date_proper", to_date(col("date_formatted")))
 df = df.withColumn("week_of_year", weekofyear(col("date_proper")))
 
 # Get the temperature column name
