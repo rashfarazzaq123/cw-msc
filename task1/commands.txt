@@ -1,0 +1,36 @@
+# 1. Enter the namenode container
+docker exec -it namenode bash
+
+# 2. Create HDFS directory
+hdfs dfs -mkdir -p /opt/data/weather
+
+# 3. Upload locationData.csv
+hdfs dfs -put /opt/data/locationData.csv /opt/data/weather/
+
+# 4. Upload weatherData.csv
+hdfs dfs -put /opt/data/weatherData.csv /opt/data/weather/
+
+# 5. Verify upload
+hdfs dfs -ls /opt/data/weather
+
+# 6. Remove previous monthly output (if exists)
+hdfs dfs -rm -r -f /output/monthly
+
+# 7. Run SummaryMonthly MapReduce job
+hadoop jar /opt/mapreduce-jars/BigDataProject-1.0-SNAPSHOT.jar org.example.SummaryMonthly /opt/data/weather /output/monthly
+
+# 8. Check monthly output
+hdfs dfs -ls /output/monthly
+hdfs dfs -cat /output/monthly/part-* | head -20
+
+# 9. Remove previous highest output (if exists)
+hdfs dfs -rm -r -f /output/highest
+
+# 10. Run HighestPrecipitation MapReduce job
+hadoop jar /opt/mapreduce-jars/BigDataProject-1.0-SNAPSHOT.jar org.example.HighestPrecipitation /output/monthly /output/highest
+
+# 11. Check highest precipitation output
+hdfs dfs -cat /output/highest/part-*
+
+# 12. Exit the container
+exit

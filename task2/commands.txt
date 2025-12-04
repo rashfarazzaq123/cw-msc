@@ -1,0 +1,86 @@
+Step 1: Organize Your Files
+# Create the required directories
+mkdir -p data
+mkdir -p hive-scripts/task2
+
+# Move your Hive scripts to the correct location
+cp task2/*.hql hive-scripts/task2/
+
+# Copy your weather CSV data to data folder
+# (Replace with your actual CSV file location)
+cp /path/to/your/weatherData.csv data/
+cp /path/to/your/locationData.csv data/
+Step 2: Start Docker Containers
+# Start all services
+docker-compose -f task2-docker-compose.yaml up -d
+
+# Wait 2-3 minutes for all services to start
+# Check if all containers are running
+docker-compose -f task2-docker-compose.yaml ps
+Expected output: All services should show "Up" or "healthy" status.
+Step 3: Upload CSV Data to HDFS
+Similar to what you did in Task 1:
+# Enter the namenode container
+docker exec -it namenode bash
+
+# Inside the container:
+# Create HDFS directory for Hive
+hdfs dfs -mkdir -p /user/hive/warehouse/weather_data
+
+# Upload weather CSV to HDFS
+hdfs dfs -put /opt/data/weatherData.csv /user/hive/warehouse/weather_data/
+
+# Verify the upload
+hdfs dfs -ls /user/hive/warehouse/weather_data/
+
+# Check the first few lines to confirm
+hdfs dfs -cat /user/hive/warehouse/weather_data/weatherData.csv | head -5
+
+# Exit the container
+exit
+Step 4: Run Hive Queries
+Now execute your Hive scripts:
+4.1: Create Hive Table
+# Run the table creation script
+docker exec -it hive-server beeline -u jdbc:hive2://localhost:10000 \
+  -f /opt/hive-scripts/task2/01_create_tables.hql
+What this does: Creates the weather_data table schema that points to your CSV in HDFS.
+4.2: Verify Table Creation
+# Check if table was created
+docker exec -it hive-server beeline -u jdbc:hive2://localhost:10000 \
+  -e "SHOW TABLES;"
+
+# Check table schema
+docker exec -it hive-server beeline -u jdbc:hive2://localhost:10000 \
+  -e "DESCRIBE weather_data;"
+
+# Check if data is readable
+docker exec -it hive-server beeline -u jdbc:hive2://localhost:10000 \
+  -e "SELECT * FROM weather_data LIMIT 5;"
+4.3: Run Query 1 - Top 10 Most Temperate Cities
+# Execute query and display results
+docker exec -it hive-server beeline -u jdbc:hive2://localhost:10000 \
+  -f /opt/hive-scripts/task2/02_top_temperate_cities.hql
+What this does: Ranks districts by average maximum temperature and shows top 10.
+4.4: Run Query 2 - Evapotranspiration by Agricultural Season
+# Execute query and display results
+docker exec -it hive-server beeline -u jdbc:hive2://localhost:10000 \
+  -f /opt/hive-scripts/task2/03_evapotranspiration_season.hql
+What this does: Calculates average evapotranspiration grouped by district, season, and year.
+Step 5: Save Results to Files
+# Create results directory
+mkdir -p results/task2
+
+# Save Query 1 results
+docker exec -it hive-server beeline -u jdbc:hive2://localhost:10000 \
+  --outputformat=csv2 \
+  -f /opt/hive-scripts/task2/02_top_temperate_cities.hql \
+  > results/task2/top_temperate_cities.csv
+
+# Save Query 2 results
+docker exec -it hive-server beeline -u jdbc:hive2://localhost:10000 \
+  --outputformat=csv2 \
+  -f /opt/hive-scripts/task2/03_evapotranspiration_season.hql \
+  > results/task2/evapotranspiration_season.csv
+
+echo "Results saved to results/task2/"
