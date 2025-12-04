@@ -1,6 +1,7 @@
+# -*- coding: utf-8 -*-
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, year, month, weekofyear, max as spark_max, avg
-from pyspark.sql.functions import split
+from pyspark.sql.functions import col, weekofyear, max as spark_max, avg
+from pyspark.sql.functions import split, concat_ws, to_date, lpad
 
 # Create Spark session
 spark = SparkSession.builder \
@@ -30,9 +31,8 @@ df = df.withColumn("day", col("date_parts")[1].cast("int"))
 df = df.withColumn("year_num", col("date_parts")[2].cast("int"))
 
 # Create proper date for week calculation
-from pyspark.sql.functions import concat_ws, to_date, lpad
-df = df.withColumn("date_formatted", 
-    concat_ws("-", 
+df = df.withColumn("date_formatted",
+    concat_ws("-",
         col("year_num"),
         lpad(col("month_num"), 2, "0"),
         lpad(col("day"), 2, "0")
@@ -41,9 +41,19 @@ df = df.withColumn("date_formatted",
 df = df.withColumn("date_proper", to_date(col("date_formatted"), "yyyy-MM-dd"))
 df = df.withColumn("week_of_year", weekofyear(col("date_proper")))
 
+# Get the temperature column name
+temp_col = "temperature_2m_max"
+available_cols = df.columns
+if temp_col not in available_cols:
+    for col_name in available_cols:
+        if "temperature" in col_name.lower() and "max" in col_name.lower():
+            temp_col = col_name
+            print(f"Using column: {temp_col}")
+            break
+
 # Step 1: Find the hottest months (by average max temperature)
 monthly_avg = df.groupBy("year_num", "month_num").agg(
-    avg(col("temperature_2m_max (°C)")).alias("avg_max_temp")
+    avg(col(temp_col)).alias("avg_max_temp")
 ).orderBy(col("avg_max_temp").desc())
 
 print("\nTop 5 Hottest Months:")
@@ -54,7 +64,6 @@ hottest_months.show()
 hottest_months_list = hottest_months.select("year_num", "month_num").collect()
 
 # Filter data for hottest months
-from pyspark.sql.functions import lit
 hottest_filter = None
 for row in hottest_months_list:
     condition = (col("year_num") == row["year_num"]) & (col("month_num") == row["month_num"])
@@ -72,7 +81,7 @@ weekly_max_temp = df_hottest.groupBy(
     "month_num",
     "week_of_year"
 ).agg(
-    spark_max(col("temperature_2m_max (°C)")).alias("weekly_max_temp")
+    spark_max(col(temp_col)).alias("weekly_max_temp")
 ).orderBy("year_num", "month_num", "week_of_year", "city_name")
 
 print("\nWeekly Maximum Temperatures for Hottest Months:")
@@ -83,6 +92,6 @@ weekly_max_temp.write.mode("overwrite") \
     .option("header", "true") \
     .csv("hdfs://namenode:8020/user/output/task2_weekly_temp")
 
-print("\n✓ Results saved to: hdfs://namenode:8020/user/output/task2_weekly_temp")
+print("\nResults saved to: hdfs://namenode:8020/user/output/task2_weekly_temp")
 
 spark.stop()
