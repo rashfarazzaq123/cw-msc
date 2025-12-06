@@ -94,8 +94,8 @@ services:
     # Manual backup command - run with: docker-compose run oracle-backup
     command: |
       sh -c '
-        echo "Creating backup at $(date)"
-        tar czf /backups/oracle-backup-$(date +%Y%m%d-%H%M%S).tar.gz -C /data .
+        echo "Creating backup at $$(date)"
+        tar czf /backups/oracle-backup-$$(date +%Y%m%d-%H%M%S).tar.gz -C /data .
         echo "Backup completed"
       '
     profiles:
