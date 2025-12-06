@@ -1,0 +1,120 @@
+version: '3.8'
+
+# =============================================================================
+# Docker Compose for Oracle Database - Dev/Test Environment
+# Deployment target: GCP Ubuntu Server
+# For coursework development and testing
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Oracle Database Express Edition (XE) - Free for dev/test
+  # Using gvenzl/oracle-xe image - faster, lighter, easier to use
+  # No Oracle account required, faster startup than official image
+  # ---------------------------------------------------------------------------
+  oracle-db:
+    image: gvenzl/oracle-xe:21.3.0
+    container_name: oracle-xe-21c
+    restart: unless-stopped
+    platform: linux/amd64
+    environment:
+      # Oracle Password for all users (SYS, SYSTEM, PDBADMIN)
+      - ORACLE_PASSWORD=OraclePassword123
+      # Random password generation (comment above and uncomment below for random password)
+      # - ORACLE_RANDOM_PASSWORD=true
+      # App user configuration (optional - creates a new user automatically)
+      - APP_USER=coursework
+      - APP_USER_PASSWORD=CourseworkPass123
+      # Character set
+      - ORACLE_CHARACTERSET=AL32UTF8
+    volumes:
+      # Persist Oracle data files
+      - oracle_data:/opt/oracle/oradata
+      # Optional: Custom initialization scripts (DDL/DML)
+      - ./oracle-init:/container-entrypoint-initdb.d
+    ports:
+      # Oracle Listener port
+      - "1521:1521"
+      # Oracle Enterprise Manager (EM) Express
+      - "5500:5500"
+    networks:
+      - oracle-net
+    healthcheck:
+      test: ["CMD-SHELL", "healthcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    # Resource limits for dev/test environment
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
+        reservations:
+          cpus: '1.0'
+          memory: 2G
+    # Shared memory size (important for Oracle)
+    shm_size: 1g
+
+  # ---------------------------------------------------------------------------
+  # Adminer - Lightweight database management tool
+  # Web-based database administration interface
+  # ---------------------------------------------------------------------------
+  adminer:
+    image: adminer:latest
+    container_name: oracle-adminer
+    restart: unless-stopped
+    depends_on:
+      oracle-db:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      - ADMINER_DEFAULT_SERVER=oracle-db
+      - ADMINER_DESIGN=pepa-linha
+    networks:
+      - oracle-net
+
+  # ---------------------------------------------------------------------------
+  # Backup Service (Optional - for automated backups)
+  # ---------------------------------------------------------------------------
+  oracle-backup:
+    image: alpine:latest
+    container_name: oracle-backup
+    restart: "no"
+    depends_on:
+      oracle-db:
+        condition: service_healthy
+    volumes:
+      - oracle_data:/data:ro
+      - ./backups:/backups
+    networks:
+      - oracle-net
+    # Manual backup command - run with: docker-compose run oracle-backup
+    command: |
+      sh -c '
+        echo "Creating backup at $(date)"
+        tar czf /backups/oracle-backup-$(date +%Y%m%d-%H%M%S).tar.gz -C /data .
+        echo "Backup completed"
+      '
+    profiles:
+      - backup
+
+# =============================================================================
+# Persistent Volumes
+# =============================================================================
+volumes:
+  # Oracle database files (datafiles, control files, redo logs)
+  oracle_data:
+    driver: local
+
+# =============================================================================
+# Network Configuration
+# =============================================================================
+networks:
+  oracle-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.25.0.0/16
