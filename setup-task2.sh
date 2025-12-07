@@ -62,11 +62,11 @@ echo ""
 
 # Copy MapReduce JARs from task1 (if available)
 echo "Checking for MapReduce JARs..."
-if [ -d "task1/BigDataProject-1.0-SNAPSHOT" ]; then
-    cp task1/BigDataProject-1.0-SNAPSHOT/*.jar mapreduce-jars/ 2>/dev/null
+if [ -f "task1/BigDataProject-1.0-SNAPSHOT.jar" ]; then
+    cp task1/*.jar mapreduce-jars/ 2>/dev/null
     echo "✓ MapReduce JARs copied successfully"
 else
-    echo "⚠ Warning: MapReduce JAR directory not found"
+    echo "⚠ Warning: MapReduce JAR not found in task1/"
     echo "  Place JAR files manually in mapreduce-jars/ if needed"
 fi
 echo ""
